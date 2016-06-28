@@ -120,6 +120,19 @@ public class Sentry {
 					1);
 	}
 
+	public static void init(Context context,
+							String baseUrl,
+							String publicKey,
+							String secretKey,
+							String projectId) {
+		Sentry.init(context,
+					baseUrl,
+					publicKey,
+					secretKey,
+					projectId,
+					1);
+	}
+
 	public static void init(Context context, String dsn) {
 		Pair<String, String> publicKeySecretKey = getPublicKeySecretKeyPair(dsn);
 
