@@ -77,6 +77,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.Log;
+import android.util.Pair;
 
 public class Sentry {
 
@@ -85,7 +86,9 @@ public class Sentry {
 	private Context context;
 
 	private String baseUrl;
-	private String dsn;
+	private String publicKey;
+	private String secretKey;
+	private String projectId;
 	private String packageName;
 	private int verifySsl;
 	private SentryEventCaptureListener captureListener;
@@ -105,20 +108,60 @@ public class Sentry {
 		private static Sentry instance = new Sentry();
 	}
 
-	public static void init(Context context, String dsn) {
-		Sentry.init(context, DEFAULT_BASE_URL, dsn);
+	public static void init(Context context,
+							String publicKey,
+							String secretKey,
+							String projectId) {
+		Sentry.init(context,
+					DEFAULT_BASE_URL,
+					publicKey,
+					secretKey,
+					projectId,
+					1);
 	}
 
-	public static void init(Context context, String baseUrl, String dsn) {
-		Sentry.getInstance().context = context;
+	public static void init(Context context,
+							String baseUrl,
+							String publicKey,
+							String secretKey,
+							String projectId) {
+		Sentry.init(context,
+					baseUrl,
+					publicKey,
+					secretKey,
+					projectId,
+					1);
+	}
 
-		Sentry.getInstance().baseUrl = baseUrl;
-		Sentry.getInstance().dsn = dsn;
-		Sentry.getInstance().packageName = context.getPackageName();
-		Sentry.getInstance().verifySsl = getVerifySsl(dsn);
+	public static void init(Context context, String dsn) {
+		Pair<String, String> publicKeySecretKey = getPublicKeySecretKeyPair(dsn);
 
-		
-		Sentry.getInstance().setupUncaughtExceptionHandler();
+		Sentry.init(context,
+					DEFAULT_BASE_URL,
+					publicKeySecretKey.first,
+					publicKeySecretKey.second,
+					getProjectId(dsn),
+					getVerifySsl(dsn));
+	}
+
+	public static void init(Context context,
+							String baseUrl,
+							String publicKey,
+							String secretKey,
+							String projectId,
+							int verifySsl) {
+
+		Sentry sentry = Sentry.getInstance();
+
+		sentry.context = context;
+		sentry.baseUrl = baseUrl;
+		sentry.publicKey = publicKey;
+		sentry.secretKey = secretKey;
+		sentry.projectId = projectId;
+		sentry.packageName = context.getPackageName();
+		sentry.verifySsl = verifySsl;
+
+		sentry.setupUncaughtExceptionHandler();
 	}
 	
 	private static int getVerifySsl(String dsn) {
@@ -161,7 +204,17 @@ public class Sentry {
 	private static String createXSentryAuthHeader() {
 		String header = "";
 
-		Uri uri = Uri.parse(Sentry.getInstance().dsn);
+		header += "Sentry sentry_version=4,";
+		header += "sentry_client=sentry-android/" + VERSION + ",";
+		header += "sentry_timestamp=" + System.currentTimeMillis() +",";
+		header += "sentry_key=" + Sentry.getInstance().publicKey + ",";
+		header += "sentry_secret=" + Sentry.getInstance().secretKey;
+
+		return header;
+	}
+
+	private static Pair<String, String> getPublicKeySecretKeyPair(String dsn) {
+		Uri uri = Uri.parse(dsn);
 		Log.d("Sentry", "URI - " + uri);
 		String authority = uri.getAuthority().replace("@" + uri.getHost(), "");
 
@@ -169,17 +222,11 @@ public class Sentry {
 		String publicKey = authorityParts[0];
 		String secretKey = authorityParts[1];
 
-		header += "Sentry sentry_version=4,";
-		header += "sentry_client=sentry-android/" + VERSION + ",";
-		header += "sentry_timestamp=" + System.currentTimeMillis() +",";
-		header += "sentry_key=" + publicKey + ",";
-		header += "sentry_secret=" + secretKey;
-
-		return header;
+		return Pair.create(publicKey, secretKey);
 	}
 
-	private static String getProjectId() {
-		Uri uri = Uri.parse(Sentry.getInstance().dsn);
+	private static String getProjectId(String dsn) {
+		Uri uri = Uri.parse(dsn);
 		String path = uri.getPath();
 		String projectId = path.substring(path.lastIndexOf("/") + 1);
 
@@ -223,9 +270,7 @@ public class Sentry {
 		.setMessage(t.getMessage())
 		.setCulprit(culprit)
 		.setLevel(level)
-		.setException(t)
-				);
-
+		.setException(t));
 	}
 
 	public static void captureUncaughtException(Context context, Throwable t) {
@@ -411,7 +456,10 @@ public class Sentry {
 				else {
 					httpClient = getHttpsClient(new DefaultHttpClient());
 				}
-				HttpPost httpPost = new HttpPost(Sentry.getInstance().baseUrl + "/api/" + getProjectId() + "/store/");
+				HttpPost httpPost = new HttpPost(Sentry.getInstance().baseUrl
+                                                         + "/api/"
+                                                         + Sentry.getInstance().projectId
+                                                         + "/store/");
 
 				int TIMEOUT_MILLISEC = 10000;  // = 20 seconds
 				HttpParams httpParams = httpPost.getParams();
