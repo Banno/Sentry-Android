@@ -11,6 +11,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.Pair;
 import android.view.WindowManager;
 
 import org.apache.http.HttpResponse;
@@ -91,6 +92,9 @@ public class Sentry {
 
     private Context context;
     private String baseUrl;
+    private String publicKey;
+    private String secretKey;
+    private String projectId;
     private Uri dsn;
     private AppInfo appInfo = AppInfo.Empty;
     private boolean verifySsl;
@@ -132,7 +136,38 @@ public class Sentry {
     }
 
     public static void init(Context context, String dsn) {
-        init(context, dsn, true);
+        Pair<String, String> publicKeySecretKey = getPublicKeySecretKeyPair(dsn);
+
+        Sentry.init(context,
+            dsn,
+            publicKeySecretKey.first,
+            publicKeySecretKey.second,
+            getProjectId(Uri.parse(dsn)));
+    }
+
+    public static void init(Context context,
+                            String dsn,
+                            String publicKey,
+                            String secretKey,
+                            String projectId) {
+
+        Sentry sentry = Sentry.getInstance();
+
+        Uri uri = Uri.parse(dsn);
+        String port = "";
+        if (uri.getPort() >= 0) {
+            port = ":" + uri.getPort();
+        }
+
+        sentry.context = context;
+        sentry.baseUrl = uri.getScheme() + "://" + uri.getHost() + port;
+        sentry.publicKey = publicKey;
+        sentry.secretKey = secretKey;
+        sentry.projectId = projectId;
+        sentry.appInfo = AppInfo.Read(context);
+        sentry.verifySsl = getVerifySsl(dsn);
+
+        sentry.setupUncaughtExceptionHandler();
     }
 
     public static void init(Context context, String dsn, boolean setupUncaughtExceptionHandler) {
@@ -214,23 +249,29 @@ public class Sentry {
         sendAllCachedCapturedEvents();
     }
 
-    private static String createXSentryAuthHeader(Uri dsn) {
-
-        final StringBuilder header = new StringBuilder();
-
-        final String authority = dsn.getAuthority().replace("@" + dsn.getHost(), "");
-
-        final String[] authorityParts = authority.split(":");
-        final String publicKey = authorityParts[0];
-        final String secretKey = authorityParts[1];
+    private static String createXSentryAuthHeader() {
+        StringBuilder header = new StringBuilder();
 
         header.append("Sentry ")
             .append(String.format("sentry_version=%s,", sentryVersion))
             .append(String.format("sentry_client=sentry-android/%s,", BuildConfig.SENTRY_ANDROID_VERSION))
-            .append(String.format("sentry_key=%s,", publicKey))
-            .append(String.format("sentry_secret=%s", secretKey));
+            .append(String.format("sentry_timestamp=%s,", System.currentTimeMillis()))
+            .append(String.format("sentry_key=%s,", Sentry.getInstance().publicKey))
+            .append(String.format("sentry_secret=%s", Sentry.getInstance().secretKey));
 
         return header.toString();
+    }
+
+    private static Pair<String, String> getPublicKeySecretKeyPair(String dsn) {
+        Uri uri = Uri.parse(dsn);
+        Log.d("Sentry", "URI - " + uri);
+        String authority = uri.getAuthority().replace("@" + uri.getHost(), "");
+
+        String[] authorityParts = authority.split(":");
+        String publicKey = authorityParts[0];
+        String secretKey = authorityParts[1];
+
+        return Pair.create(publicKey, secretKey);
     }
 
     private static String getProjectId(Uri dsn) {
@@ -416,7 +457,10 @@ public class Sentry {
                     httpClient = getHttpsClient(new DefaultHttpClient());
                 }
 
-                HttpPost httpPost = new HttpPost(url);
+                HttpPost httpPost = new HttpPost(Sentry.getInstance().baseUrl
+                    + "/api/"
+                    + Sentry.getInstance().projectId
+                    + "/store/");
 
                 int TIMEOUT_MILLISEC = 10000;  // = 20 seconds
                 HttpParams httpParams = httpPost.getParams();
@@ -428,7 +472,7 @@ public class Sentry {
 
                 boolean success = false;
                 try {
-                    httpPost.setHeader("X-Sentry-Auth", createXSentryAuthHeader(sentry.dsn));
+                    httpPost.setHeader("X-Sentry-Auth", createXSentryAuthHeader());
                     httpPost.setHeader("User-Agent", "sentry-android/" + BuildConfig.SENTRY_ANDROID_VERSION);
                     httpPost.setHeader("Content-Type", "application/json; charset=utf-8");
 

@@ -1,1 +1,2 @@
 include ':sentry-android', ':sentry-app'
+rootProject.name = 'sentry'
