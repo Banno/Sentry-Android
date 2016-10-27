@@ -86,7 +86,7 @@ public class Sentry {
     private static final String TAG = "Sentry";
     private final static String sentryVersion = "7";
     private static final int MAX_QUEUE_LENGTH = 50;
-    private static final int MAX_BREADCRUMBS = 10;
+    private static final int MAX_BREADCRUMBS = 10000;
 
     public static boolean debug = false;
 
@@ -95,13 +95,12 @@ public class Sentry {
     private String publicKey;
     private String secretKey;
     private String projectId;
-    private Uri dsn;
     private AppInfo appInfo = AppInfo.Empty;
     private boolean verifySsl;
     private SentryEventCaptureListener captureListener;
     private JSONObject contexts = new JSONObject();
     private Executor executor;
-    private LinkedList<Breadcrumb> breadcrumbs = new LinkedList<>();
+    private static LinkedList<Breadcrumb> breadcrumbs = new LinkedList<>();
 
     public enum SentryEventLevel {
 
@@ -138,53 +137,55 @@ public class Sentry {
     public static void init(Context context, String dsn) {
         Pair<String, String> publicKeySecretKey = getPublicKeySecretKeyPair(dsn);
 
-        Sentry.init(context,
-            dsn,
+        Uri uri = Uri.parse(dsn);
+        String port = "";
+        if (uri.getPort() >= 0) {
+            port = ":" + uri.getPort();
+        }
+
+        init(context,
+            uri.getScheme() + "://" + uri.getHost() + port,
             publicKeySecretKey.first,
             publicKeySecretKey.second,
             getProjectId(Uri.parse(dsn)));
     }
 
     public static void init(Context context,
-                            String dsn,
+                            String baseUrl,
                             String publicKey,
                             String secretKey,
                             String projectId) {
 
-        Sentry sentry = Sentry.getInstance();
-
-        Uri uri = Uri.parse(dsn);
-        String port = "";
-        if (uri.getPort() >= 0) {
-            port = ":" + uri.getPort();
-        }
-
-        sentry.context = context;
-        sentry.baseUrl = uri.getScheme() + "://" + uri.getHost() + port;
-        sentry.publicKey = publicKey;
-        sentry.secretKey = secretKey;
-        sentry.projectId = projectId;
-        sentry.appInfo = AppInfo.Read(context);
-        sentry.verifySsl = getVerifySsl(dsn);
-
-        sentry.setupUncaughtExceptionHandler();
+        init(context, baseUrl, publicKey, secretKey, projectId, true);
     }
 
-    public static void init(Context context, String dsn, boolean setupUncaughtExceptionHandler) {
+    public static void init(Context context,
+                            String baseUrl,
+                            String publicKey,
+                            String secretKey,
+                            String projectId,
+                            boolean verifySsl) {
+
+        init(context, baseUrl, publicKey, secretKey, projectId, verifySsl, true);
+    }
+
+    public static void init(Context context,
+                            String baseUrl,
+                            String publicKey,
+                            String secretKey,
+                            String projectId,
+                            boolean verifySsl,
+                            boolean setupUncaughtExceptionHandler) {
+
         final Sentry sentry = Sentry.getInstance();
 
         sentry.context = context.getApplicationContext();
-
-        Uri uri = Uri.parse(dsn);
-        String port = "";
-        if (uri.getPort() >= 0) {
-            port = ":" + uri.getPort();
-        }
-
-        sentry.baseUrl = uri.getScheme() + "://" + uri.getHost() + port;
-        sentry.dsn = uri;
+        sentry.baseUrl = baseUrl;
+        sentry.publicKey = publicKey;
+        sentry.secretKey = secretKey;
+        sentry.projectId = projectId;
         sentry.appInfo = AppInfo.Read(sentry.context);
-        sentry.verifySsl = getVerifySsl(dsn);
+        sentry.verifySsl = verifySsl;
         sentry.contexts = readContexts(sentry.context, sentry.appInfo);
         sentry.executor = fixedQueueDiscardingExecutor(MAX_QUEUE_LENGTH);
 
@@ -443,11 +444,6 @@ public class Sentry {
         sentry.executor.execute(new Runnable() {
             @Override
             public void run() {
-                int projectId = Integer.parseInt(getProjectId(sentry.dsn));
-                String url = sentry.baseUrl + "/api/" + projectId + "/store/";
-
-                log("Sending to URL - " + url);
-
                 HttpClient httpClient;
                 if (Sentry.getInstance().verifySsl) {
                     log("Using http client");
@@ -457,9 +453,9 @@ public class Sentry {
                     httpClient = getHttpsClient(new DefaultHttpClient());
                 }
 
-                HttpPost httpPost = new HttpPost(Sentry.getInstance().baseUrl
+                HttpPost httpPost = new HttpPost(sentry.baseUrl
                     + "/api/"
-                    + Sentry.getInstance().projectId
+                    + sentry.projectId
                     + "/store/");
 
                 int TIMEOUT_MILLISEC = 10000;  // = 20 seconds
@@ -567,6 +563,7 @@ public class Sentry {
 
             if (builder != null) {
                 builder.event.put("contexts", sentry.contexts);
+                builder.event.put("breadcrumbs", Sentry.getInstance().currentBreadcrumbs());
                 storage.addRequest(new SentryEventRequest(builder));
             } else {
                 Log.e(Sentry.TAG, "SentryEventBuilder in uncaughtException is null");
