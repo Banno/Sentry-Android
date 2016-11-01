@@ -100,7 +100,7 @@ public class Sentry {
     private SentryEventCaptureListener captureListener;
     private JSONObject contexts = new JSONObject();
     private Executor executor;
-    private static LinkedList<Breadcrumb> breadcrumbs = new LinkedList<>();
+    private LinkedList<Breadcrumb> breadcrumbs = new LinkedList<>();
 
     public enum SentryEventLevel {
 
