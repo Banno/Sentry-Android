@@ -86,7 +86,7 @@ public class Sentry {
     private static final String TAG = "Sentry";
     private final static String sentryVersion = "7";
     private static final int MAX_QUEUE_LENGTH = 50;
-    private static final int MAX_BREADCRUMBS = 10000;
+    private static final int MAX_BREADCRUMBS = 1000;
 
     public static boolean debug = false;
 
