@@ -11,6 +11,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.Pair;
 import android.view.WindowManager;
 
 import org.apache.http.HttpResponse;
@@ -91,7 +92,9 @@ public class Sentry {
 
     private Context context;
     private String baseUrl;
-    private Uri dsn;
+    private String publicKey;
+    private String secretKey;
+    private String projectId;
     private AppInfo appInfo = AppInfo.Empty;
     private boolean verifySsl;
     private SentryEventCaptureListener captureListener;
@@ -132,13 +135,7 @@ public class Sentry {
     }
 
     public static void init(Context context, String dsn) {
-        init(context, dsn, true);
-    }
-
-    public static void init(Context context, String dsn, boolean setupUncaughtExceptionHandler) {
-        final Sentry sentry = Sentry.getInstance();
-
-        sentry.context = context.getApplicationContext();
+        Pair<String, String> publicKeySecretKey = getPublicKeySecretKeyPair(dsn);
 
         Uri uri = Uri.parse(dsn);
         String port = "";
@@ -146,10 +143,49 @@ public class Sentry {
             port = ":" + uri.getPort();
         }
 
-        sentry.baseUrl = uri.getScheme() + "://" + uri.getHost() + port;
-        sentry.dsn = uri;
+        init(context,
+            uri.getScheme() + "://" + uri.getHost() + port,
+            publicKeySecretKey.first,
+            publicKeySecretKey.second,
+            getProjectId(Uri.parse(dsn)));
+    }
+
+    public static void init(Context context,
+                            String baseUrl,
+                            String publicKey,
+                            String secretKey,
+                            String projectId) {
+
+        init(context, baseUrl, publicKey, secretKey, projectId, true);
+    }
+
+    public static void init(Context context,
+                            String baseUrl,
+                            String publicKey,
+                            String secretKey,
+                            String projectId,
+                            boolean verifySsl) {
+
+        init(context, baseUrl, publicKey, secretKey, projectId, verifySsl, true);
+    }
+
+    public static void init(Context context,
+                            String baseUrl,
+                            String publicKey,
+                            String secretKey,
+                            String projectId,
+                            boolean verifySsl,
+                            boolean setupUncaughtExceptionHandler) {
+
+        final Sentry sentry = Sentry.getInstance();
+
+        sentry.context = context.getApplicationContext();
+        sentry.baseUrl = baseUrl;
+        sentry.publicKey = publicKey;
+        sentry.secretKey = secretKey;
+        sentry.projectId = projectId;
         sentry.appInfo = AppInfo.Read(sentry.context);
-        sentry.verifySsl = getVerifySsl(dsn);
+        sentry.verifySsl = verifySsl;
         sentry.contexts = readContexts(sentry.context, sentry.appInfo);
         sentry.executor = fixedQueueDiscardingExecutor(MAX_QUEUE_LENGTH);
 
@@ -214,23 +250,29 @@ public class Sentry {
         sendAllCachedCapturedEvents();
     }
 
-    private static String createXSentryAuthHeader(Uri dsn) {
-
-        final StringBuilder header = new StringBuilder();
-
-        final String authority = dsn.getAuthority().replace("@" + dsn.getHost(), "");
-
-        final String[] authorityParts = authority.split(":");
-        final String publicKey = authorityParts[0];
-        final String secretKey = authorityParts[1];
+    private static String createXSentryAuthHeader() {
+        StringBuilder header = new StringBuilder();
 
         header.append("Sentry ")
             .append(String.format("sentry_version=%s,", sentryVersion))
             .append(String.format("sentry_client=sentry-android/%s,", BuildConfig.SENTRY_ANDROID_VERSION))
-            .append(String.format("sentry_key=%s,", publicKey))
-            .append(String.format("sentry_secret=%s", secretKey));
+            .append(String.format("sentry_timestamp=%s,", System.currentTimeMillis()))
+            .append(String.format("sentry_key=%s,", Sentry.getInstance().publicKey))
+            .append(String.format("sentry_secret=%s", Sentry.getInstance().secretKey));
 
         return header.toString();
+    }
+
+    private static Pair<String, String> getPublicKeySecretKeyPair(String dsn) {
+        Uri uri = Uri.parse(dsn);
+        Log.d("Sentry", "URI - " + uri);
+        String authority = uri.getAuthority().replace("@" + uri.getHost(), "");
+
+        String[] authorityParts = authority.split(":");
+        String publicKey = authorityParts[0];
+        String secretKey = authorityParts[1];
+
+        return Pair.create(publicKey, secretKey);
     }
 
     private static String getProjectId(Uri dsn) {
@@ -402,11 +444,6 @@ public class Sentry {
         sentry.executor.execute(new Runnable() {
             @Override
             public void run() {
-                int projectId = Integer.parseInt(getProjectId(sentry.dsn));
-                String url = sentry.baseUrl + "/api/" + projectId + "/store/";
-
-                log("Sending to URL - " + url);
-
                 HttpClient httpClient;
                 if (Sentry.getInstance().verifySsl) {
                     log("Using http client");
@@ -416,7 +453,10 @@ public class Sentry {
                     httpClient = getHttpsClient(new DefaultHttpClient());
                 }
 
-                HttpPost httpPost = new HttpPost(url);
+                HttpPost httpPost = new HttpPost(sentry.baseUrl
+                    + "/api/"
+                    + sentry.projectId
+                    + "/store/");
 
                 int TIMEOUT_MILLISEC = 10000;  // = 20 seconds
                 HttpParams httpParams = httpPost.getParams();
@@ -428,7 +468,7 @@ public class Sentry {
 
                 boolean success = false;
                 try {
-                    httpPost.setHeader("X-Sentry-Auth", createXSentryAuthHeader(sentry.dsn));
+                    httpPost.setHeader("X-Sentry-Auth", createXSentryAuthHeader());
                     httpPost.setHeader("User-Agent", "sentry-android/" + BuildConfig.SENTRY_ANDROID_VERSION);
                     httpPost.setHeader("Content-Type", "application/json; charset=utf-8");
 
