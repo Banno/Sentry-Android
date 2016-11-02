@@ -7,6 +7,9 @@ apply plugin: 'com.android.library'
 
 def SentryAndroidVersion = "1.5.0-SNAPSHOT"
 
+group = 'com.joshdholtz.sentry'
+version = SentryAndroidVersion
+
 android {
     compileSdkVersion 24
     buildToolsVersion "23.0.3"
