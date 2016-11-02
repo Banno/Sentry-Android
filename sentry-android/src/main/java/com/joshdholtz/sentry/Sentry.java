@@ -1128,6 +1128,9 @@ public class Sentry {
          * A stack trace for the current thread can be obtained by using
          * `Thread.currentThread().getStackTrace()`.
          *
+         * @param stackTrace StackTraceElement[]
+         * @return SentryEventBuilder
+         *
          * @see Thread#currentThread()
          * @see Thread#getStackTrace()
          */
