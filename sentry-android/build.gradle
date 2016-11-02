@@ -63,3 +63,10 @@ ext {
 apply from: 'https://raw.githubusercontent.com/nuuneoi/JCenter/master/installv1.gradle'
 apply from: 'https://raw.githubusercontent.com/nuuneoi/JCenter/master/bintrayv1.gradle'
 
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            repository(url: String.format("file:%s/.m2/repository", System.getProperty("user.home")))
+        }
+    }
+}
