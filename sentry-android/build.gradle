@@ -3,10 +3,12 @@ plugins {
 }
 
 apply plugin: 'com.android.library'
-apply plugin: 'maven'
 
 
 def SentryAndroidVersion = "1.5.0-SNAPSHOT"
+
+group = 'com.joshdholtz.sentry'
+version = SentryAndroidVersion
 
 android {
     compileSdkVersion 24
@@ -26,14 +28,6 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-        }
-    }
-}
-
-uploadArchives {
-    repositories {
-        mavenDeployer {
-            repository(url: String.format("file:%s/.m2/repository", System.getProperty("user.home")))
         }
     }
 }
@@ -70,5 +64,12 @@ ext {
 }
 
 apply from: 'https://raw.githubusercontent.com/nuuneoi/JCenter/master/installv1.gradle'
-apply from: 'https://raw.githubusercontent.com/nuuneoi/JCenter/master/bintrayv1.gradle'
+//apply from: 'https://raw.githubusercontent.com/nuuneoi/JCenter/master/bintrayv1.gradle'
 
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            repository(url: String.format("file:%s/.m2/repository", System.getProperty("user.home")))
+        }
+    }
+}
