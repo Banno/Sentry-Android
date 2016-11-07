@@ -350,7 +350,7 @@ public class Sentry {
         final SentryEventRequest request;
         builder.event.put("contexts", sentry.contexts);
         builder.setRelease(Integer.toString(sentry.appInfo.versionCode));
-        builder.event.put("breadcrumbs", Sentry.getInstance().currentBreadcrumbs());
+        builder.event.put("breadcrumbs", sentry.currentBreadcrumbs());
         if (sentry.captureListener != null) {
 
 
@@ -563,7 +563,7 @@ public class Sentry {
 
             if (builder != null) {
                 builder.event.put("contexts", sentry.contexts);
-                builder.event.put("breadcrumbs", Sentry.getInstance().currentBreadcrumbs());
+                builder.event.put("breadcrumbs", sentry.currentBreadcrumbs());
                 storage.addRequest(new SentryEventRequest(builder));
             } else {
                 Log.e(Sentry.TAG, "SentryEventBuilder in uncaughtException is null");
