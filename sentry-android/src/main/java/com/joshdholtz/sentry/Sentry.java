@@ -86,7 +86,7 @@ public class Sentry {
     private static final String TAG = "Sentry";
     private final static String sentryVersion = "7";
     private static final int MAX_QUEUE_LENGTH = 50;
-    private static final int MAX_BREADCRUMBS = 10;
+    private static final int MAX_BREADCRUMBS = 1000;
 
     public static boolean debug = false;
 
@@ -350,7 +350,7 @@ public class Sentry {
         final SentryEventRequest request;
         builder.event.put("contexts", sentry.contexts);
         builder.setRelease(Integer.toString(sentry.appInfo.versionCode));
-        builder.event.put("breadcrumbs", Sentry.getInstance().currentBreadcrumbs());
+        builder.event.put("breadcrumbs", sentry.currentBreadcrumbs());
         if (sentry.captureListener != null) {
 
 
@@ -563,6 +563,7 @@ public class Sentry {
 
             if (builder != null) {
                 builder.event.put("contexts", sentry.contexts);
+                builder.event.put("breadcrumbs", sentry.currentBreadcrumbs());
                 storage.addRequest(new SentryEventRequest(builder));
             } else {
                 Log.e(Sentry.TAG, "SentryEventBuilder in uncaughtException is null");
